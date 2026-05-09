@@ -32,7 +32,8 @@ progStatusPin.switch_to_input(pull=digitalio.Pull.UP)
 progStatus = not progStatusPin.value
 
 ### DISABLING ATTACK MODE (i.e SETUP MODE ONLY, FOR DEV) ###
-# progStatus = True
+progStatus = True
+print("boot.py option forces SETUP mode, for dev purposes. Edit boot.py to make ATTACK possible.")
 ### END OF DISABLING ATTACK MODE ###
 
 # If setup mode is active, we want USB drive enabled
