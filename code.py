@@ -39,7 +39,12 @@ def startWiFi():
 
 # turn off automatically reloading when files are written to the pico
 #supervisor.disable_autoreload()
-supervisor.runtime.autoreload = False
+
+# Attack mode
+# supervisor.runtime.autoreload = False
+
+# Dev mode
+supervisor.runtime.autoreload = True
 
 if(board.board_id == 'raspberry_pi_pico' or board.board_id == 'raspberry_pi_pico2'):
     led = pwmio.PWMOut(board.LED, frequency=5000, duty_cycle=0)
@@ -85,4 +90,10 @@ async def main_loop():
         pico_led_task = asyncio.create_task(blink_pico_led(led))
         await asyncio.gather(pico_led_task, button_task, payload_task, led_task )
 
+### DUCKY ENTRYPOINT ###
 asyncio.run(main_loop())
+### END OF DUCKY ENTRYPOINT ###
+
+### PIM DISPLAY ENTRYPOINT ###
+print("Display logic!")
+### END OF PIM DISPLAY ENTRYPOINT ###

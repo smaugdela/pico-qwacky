@@ -1,6 +1,9 @@
-REM The next five lines open Notepad in Windows and type "Hello World!"
-GUI r
-STRING notepad
-ENTER
-DELAY 250
-STRING Hello World!
+REM Just a note printing payload to check proper function
+DELAY 200
+WINDOWS d
+DELAY 200
+ALT F2
+DELAY 300
+STRINGLN vim
+DELAY 600
+STRING iWelcome to Hell
