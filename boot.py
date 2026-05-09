@@ -31,6 +31,10 @@ progStatusPin = digitalio.DigitalInOut(GP0)
 progStatusPin.switch_to_input(pull=digitalio.Pull.UP)
 progStatus = not progStatusPin.value
 
+### DISABLING ATTACK MODE (i.e SETUP MODE ONLY, FOR DEV) ###
+# progStatus = True
+### END OF DISABLING ATTACK MODE ###
+
 # If setup mode is active, we want USB drive enabled
 if progStatus:
     print("SETUP mode enabled, skipping rest of boot and enabling USB drive.")
