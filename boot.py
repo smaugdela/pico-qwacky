@@ -36,7 +36,7 @@ if progStatus:
     print("SETUP mode enabled, skipping rest of boot and enabling USB drive.")
 else:
     # If GP3 is not connected, it will default to being pulled high (True)
-    # If GP is connected to GND, it will be low (False)
+    # If GP3 is connected to GND, it will be low (False)
 
     # Pico:
     #   GP3 not connected == USB visible
