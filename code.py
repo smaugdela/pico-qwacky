@@ -1,130 +1,37 @@
 # License : GPLv2.0
 # copyright (c) 2023  Dave Bailey
 # Author: Dave Bailey (dbisu, @daveisu)
-# Pico and Pico W board support
+# Modified for Pimoroni Pico Display Menu UI
 
-
-### ducky imports
 import supervisor
 import os
 import pwmio
 import time
 import digitalio
-from board import *
+import asyncio
 import board
-from duckyinpython import *
-if(board.board_id == 'raspberry_pi_pico_w' or board.board_id == 'raspberry_pi_pico2_w'):
-    import wifi
-    from webapp import *
-
-# display imports
-# import board
-# from board import *
 import busio
 import displayio
 import terminalio
 from adafruit_display_text import label
 from fourwire import FourWire
-
 from adafruit_st7789 import ST7789
 
+from duckyinpython import *
+import pins # Imports our latched button states
 
-# sleep at the start to allow the device to be recognized by the host computer
+if board.board_id in ('raspberry_pi_pico_w', 'raspberry_pi_pico2_w'):
+    import wifi
+    from webapp import *
+
+# Allow host recognition
 time.sleep(.5)
 
-def startWiFi():
-    import ipaddress
-    # Get wifi details and more from a secrets.py file
-    try:
-        from secrets import secrets
-    except ImportError:
-        print("WiFi secrets are kept in secrets.py, please add them there!")
-        raise
-
-    print("Connect wifi")
-    #wifi.radio.connect(secrets['ssid'],secrets['password'])
-    wifi.radio.start_ap(secrets['ssid'],secrets['password'])
-
-    HOST = repr(wifi.radio.ipv4_address_ap)
-    PORT = 80        # Port to listen on
-    print(HOST,PORT)
-
-# turn off automatically reloading when files are written to the pico
-#supervisor.disable_autoreload()
-
-# Attack mode
-# supervisor.runtime.autoreload = False
-# Dev mode
-supervisor.runtime.autoreload = True
-
-if(board.board_id == 'raspberry_pi_pico' or board.board_id == 'raspberry_pi_pico2'):
-    led = pwmio.PWMOut(board.LED, frequency=5000, duty_cycle=0)
-elif(board.board_id == 'raspberry_pi_pico_w' or board.board_id == 'raspberry_pi_pico2_w'):
-    led = digitalio.DigitalInOut(board.LED)
-    led.switch_to_output()
-
-async def run_payload_on_startup():
-    progStatus = False
-    progStatus = getProgrammingStatus()
-    print("progStatus", progStatus)
-    if(progStatus == False):
-        print("Finding payload")
-        if "loot.bin" in os.listdir("/"):
-            print("loot.bin exists, skipping payload execution.")
-        else:
-            payload = selectPayload()
-            await asyncio.sleep(0.1)
-            print("Running")
-            await runScript(payload)
-    else:
-        print("Done")
-
-
-led_state = False
-
-
-async def main_loop():
-    global led,button1
-
-    button_task = asyncio.create_task(monitor_buttons(button1))
-    payload_task = asyncio.create_task(run_payload_on_startup())
-    led_task = asyncio.create_task(monitor_led_changes())
-    if(board.board_id == 'raspberry_pi_pico_w' or board.board_id == 'raspberry_pi_pico2_w'):
-        pico_led_task = asyncio.create_task(blink_pico_w_led(led))
-        print("Starting Wifi")
-        startWiFi()
-        print("Starting Web Service")
-        webservice_task = asyncio.create_task(startWebService())
-        await asyncio.gather(pico_led_task, button_task, webservice_task, payload_task, led_task)
-    else:
-        pico_led_task = asyncio.create_task(blink_pico_led(led))
-        await asyncio.gather(pico_led_task, button_task, payload_task, led_task )
-
-
-### PIM DISPLAY ENTRYPOINT ###
-"""
-This test will initialize the display using displayio and draw a solid green
-background, a smaller purple rectangle, and some yellow text.
-"""
-
-# First set some parameters used for shapes and text
-BORDER = 20
-FONTSCALE = 2
-BACKGROUND_COLOR = 0x00FF00  # Bright Green
-FOREGROUND_COLOR = 0xAA0088  # Purple
-TEXT_COLOR = 0xFFFF00
-
-# Release any resources currently in use for the displays
+# --- DISPLAY INITIALIZATION ---
 displayio.release_displays()
 
-tft_cs = board.GP17
-tft_dc = board.GP16
-spi_mosi = board.GP19
-spi_clk = board.GP18
-spi = busio.SPI(spi_clk, spi_mosi)
-backlight = board.GP20
-
-display_bus = FourWire(spi, command=tft_dc, chip_select=tft_cs)
+spi = busio.SPI(board.GP18, board.GP19)
+display_bus = FourWire(spi, command=board.GP16, chip_select=board.GP17)
 
 display = ST7789(
     display_bus,
@@ -133,47 +40,159 @@ display = ST7789(
     height=135,
     rowstart=40,
     colstart=53,
-    backlight_pin=backlight,
+    backlight_pin=board.GP20,
 )
-
-# Set the backlight
 display.brightness = 0.8
 
-# Make the display context
-splash = displayio.Group()
-display.root_group = splash
+# --- MENU UI CLASS ---
+class PayloadMenu:
+    def __init__(self, display):
+        self.group = displayio.Group()
+        display.root_group = self.group
+        
+        # Colors
+        bg_color = 0x000000
+        text_color = 0x00FF00
+        action_color = 0xFF00FF
+        
+        # Background
+        color_bitmap = displayio.Bitmap(display.width, display.height, 1)
+        color_palette = displayio.Palette(1)
+        color_palette[0] = bg_color
+        self.group.append(displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0))
+        
+        # Labels (Using anchor points to easily snap to corners)
+        self.lbl_title = label.Label(terminalio.FONT, text="", color=text_color, scale=2)
+        self.lbl_title.anchor_point = (0.5, 0.5)
+        self.lbl_title.anchored_position = (120, 67)
+        
+        # Mapping: B = Top Left, A = Top Right, Y = Bottom Left, X = Bottom Right
+        self.lbl_tl = label.Label(terminalio.FONT, text="", color=action_color, scale=2)
+        self.lbl_tl.anchor_point = (0, 0)
+        self.lbl_tl.anchored_position = (5, 5)
+        
+        self.lbl_tr = label.Label(terminalio.FONT, text="", color=action_color, scale=2)
+        self.lbl_tr.anchor_point = (1, 0)
+        self.lbl_tr.anchored_position = (235, 5)
+        
+        self.lbl_bl = label.Label(terminalio.FONT, text="", color=action_color, scale=2)
+        self.lbl_bl.anchor_point = (0, 1)
+        self.lbl_bl.anchored_position = (5, 130)
+        
+        self.lbl_br = label.Label(terminalio.FONT, text="", color=action_color, scale=2)
+        self.lbl_br.anchor_point = (1, 1)
+        self.lbl_br.anchored_position = (235, 130)
+        
+        for lbl in [self.lbl_title, self.lbl_tl, self.lbl_tr, self.lbl_bl, self.lbl_br]:
+            self.group.append(lbl)
 
-color_bitmap = displayio.Bitmap(display.width, display.height, 1)
-color_palette = displayio.Palette(1)
-color_palette[0] = BACKGROUND_COLOR
+    def show(self, title, tl, tr, bl, br):
+        self.lbl_title.text = title
+        self.lbl_tl.text = tl
+        self.lbl_tr.text = tr
+        self.lbl_bl.text = bl
+        self.lbl_br.text = br
 
-bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0)
-splash.append(bg_sprite)
+# --- WIFI & SYSTEM SETUP ---
+def startWiFi():
+    try:
+        from secrets import secrets
+    except ImportError:
+        print("WiFi secrets missing!")
+        raise
+    wifi.radio.start_ap(secrets['ssid'], secrets['password'])
+    print(repr(wifi.radio.ipv4_address_ap), 80)
 
-# Draw a smaller inner rectangle
-inner_bitmap = displayio.Bitmap(display.width - BORDER * 2, display.height - BORDER * 2, 1)
-inner_palette = displayio.Palette(1)
-inner_palette[0] = FOREGROUND_COLOR
-inner_sprite = displayio.TileGrid(inner_bitmap, pixel_shader=inner_palette, x=BORDER, y=BORDER)
-splash.append(inner_sprite)
+supervisor.runtime.autoreload = True # Dev mode
 
-# Draw a label
-text = "Hello Night City!"
-text_area = label.Label(terminalio.FONT, text=text, color=TEXT_COLOR)
-text_width = text_area.bounding_box[2] * FONTSCALE
-text_group = displayio.Group(
-    scale=FONTSCALE,
-    x=display.width // 2 - text_width // 2,
-    y=display.height // 2,
-)
-text_group.append(text_area)  # Subgroup for text scaling
-splash.append(text_group)
+if board.board_id in ('raspberry_pi_pico', 'raspberry_pi_pico2'):
+    led = pwmio.PWMOut(board.LED, frequency=5000, duty_cycle=0)
+elif board.board_id in ('raspberry_pi_pico_w', 'raspberry_pi_pico2_w'):
+    led = digitalio.DigitalInOut(board.LED)
+    led.switch_to_output()
 
-# while True:
-#     pass
-### END OF PIM DISPLAY ENTRYPOINT ###
+# --- ASYNC MENU STATE MACHINE ---
+async def interactive_payload_selector():
+    menu = PayloadMenu(display)
+    state = 0
+    choices = ["", "", ""] # [OS, KB, TYPE]
+    
+    while True:
+        # Update physical buttons via debouncer from pins.py
+        pins.button_A.update()
+        pins.button_B.update()
+        pins.button_X.update()
+        pins.button_Y.update()
+        
+        if state == 0:
+            menu.show("Select OS", "Win", "Mac", "Lin", "")
+            if pins.button_A.fell: choices[0] = "win"; state = 1    # Top-Left
+            elif pins.button_X.fell: choices[0] = "mac"; state = 1  # Top-Right
+            elif pins.button_B.fell: choices[0] = "lin"; state = 1  # Bottom-Right
+            
+        elif state == 1:
+            menu.show("Keyboard", "US", "FR", "", "Back")
+            if pins.button_A.fell: choices[1] = "us"; state = 2     # Top-Left
+            elif pins.button_X.fell: choices[1] = "fr"; state = 2   # Top-Right
+            elif pins.button_Y.fell: state = 0                      # Bottom-Left (Back)
 
+        elif state == 2:
+            menu.show("Payload", "Prank", "RAT", "Exfil", "Back")
+            if pins.button_A.fell: choices[2] = "prank"; state = 3  # Top-Left
+            elif pins.button_X.fell: choices[2] = "rat"; state = 3  # Top-Right
+            elif pins.button_B.fell: choices[2] = "exfil"; state = 3 # Bottom-Right
+            elif pins.button_Y.fell: state = 1                      # Bottom-Left (Back)
+            
+        elif state == 3:
+            payload_name = f"{choices[0]}-{choices[1]}-{choices[2]}.dd"
+            menu.show(payload_name, "", "", "YES", "NO")
+            if pins.button_B.fell: # Confirm
+                menu.show("Running...", "", "", "", "")
+                return payload_name
+            elif pins.button_Y.fell: # Cancel/Back
+                state = 2
+                
+        # Yield time to system / other async tasks
+        await asyncio.sleep(0.05)
+
+# --- MAIN EXECUTION LOGIC ---
+async def run_payload_on_startup():
+    progStatus = getProgrammingStatus()
+    print("progStatus", progStatus)
+    
+    if not progStatus:
+        while True:
+            if "loot.bin" in os.listdir("/"):
+                print("loot.bin exists, skipping payload execution.")
+            else:
+                print("Starting Payload UI Wizard...")
+                payload = await interactive_payload_selector()
+                await asyncio.sleep(0.1)
+                print(f"Running: {payload}")
+                
+                # Check if file actually exists before running
+                if payload in os.listdir("/"):
+                    await runScript(payload)
+                else:
+                    PayloadMenu(display).show("Not Found!", "", "", "", "")
+                    await asyncio.sleep(1.5)
+    else:
+        print("Setup Mode Active. Bypassing Payload.")
+        PayloadMenu(display).show("Setup Mode", "", "", "", "")
+
+async def main_loop():
+    global led
+    payload_task = asyncio.create_task(run_payload_on_startup())
+    led_task = asyncio.create_task(monitor_led_changes())
+    
+    if board.board_id in ('raspberry_pi_pico_w', 'raspberry_pi_pico2_w'):
+        pico_led_task = asyncio.create_task(blink_pico_w_led(led))
+        startWiFi()
+        webservice_task = asyncio.create_task(startWebService())
+        await asyncio.gather(pico_led_task, webservice_task, payload_task, led_task)
+    else:
+        pico_led_task = asyncio.create_task(blink_pico_led(led))
+        await asyncio.gather(pico_led_task, payload_task, led_task)
 
 ### DUCKY ENTRYPOINT ###
 asyncio.run(main_loop())
-### END OF DUCKY ENTRYPOINT ###
