@@ -1,13 +1,24 @@
 # License : GPLv2.0
-# copyright (c) 2023  Dave Bailey
-# Author: Dave Bailey (dbisu, @daveisu)
-# Pico and Pico W board support
+# copyright (c) 2023 Dave Bailey (dbisu, @daveisu)
+# Modified for Pimoroni Pico Display buttons
 
-from board import *
 import board
 import digitalio
 import storage
 import os
+
+# 1. Temporarily init Buttons A (Setup) and B (Storage)
+btnA = digitalio.DigitalInOut(board.GP12)
+btnA.switch_to_input(pull=digitalio.Pull.UP)
+btnA_pressed = not btnA.value # True if pressed to GND
+
+btnB = digitalio.DigitalInOut(board.GP13)
+btnB.switch_to_input(pull=digitalio.Pull.UP)
+btnB_pressed = not btnB.value # True if pressed to GND
+
+# 2. IMPORTANT: Free the pins so code.py and your display UI can use them!
+btnA.deinit()
+btnB.deinit()
 
 def is_exfil_enabled(payload_path="payload.dd"):
     try:
@@ -21,51 +32,28 @@ def is_exfil_enabled(payload_path="payload.dd"):
 
 exfil_enabled = is_exfil_enabled()
 loot_exists = "loot.bin" in os.listdir("/")
-noStorage = False
-noStoragePin = digitalio.DigitalInOut(GP3)
-noStoragePin.switch_to_input(pull=digitalio.Pull.UP)
-noStorageStatus = noStoragePin.value
 
-# check GP0 for setup mode -> This is redundant with duckyinpython.py & pins.py
-progStatusPin = digitalio.DigitalInOut(GP0)
-progStatusPin.switch_to_input(pull=digitalio.Pull.UP)
-progStatus = not progStatusPin.value
+# 3. Determine Storage Status based on button presses
+enable_storage = False
 
-### DISABLING ATTACK MODE (i.e SETUP MODE ONLY, FOR DEV) ###
-progStatus = True
-print("boot.py option forces SETUP mode, for dev purposes. Edit boot.py to make ATTACK possible.")
-### END OF DISABLING ATTACK MODE ###
-
-# If setup mode is active, we want USB drive enabled
-if progStatus:
-    print("SETUP mode enabled, skipping rest of boot and enabling USB drive.")
+if btnA_pressed:
+    print("Setup & Storage mode forced via display button.")
+    enable_storage = True
+elif btnB_pressed:
+    print("Storage mode forced via display button.")
+    enable_storage = True
 else:
-    # If GP3 is not connected, it will default to being pulled high (True)
-    # If GP3 is connected to GND, it will be low (False)
+    # Standard logic if no buttons are held
+    if board.board_id in ('raspberry_pi_pico', 'raspberry_pi_pico2'):
+        enable_storage = True
+    elif board.board_id in ('raspberry_pi_pico_w', 'raspberry_pi_pico2_w'):
+        enable_storage = False
 
-    # Pico:
-    #   GP3 not connected == USB visible
-    #   GP3 connected to GND == USB not visible
+    if exfil_enabled and not loot_exists:
+        enable_storage = False
 
-    # Pico W:
-    #   GP3 not connected == USB NOT visible
-    #   GP3 connected to GND == USB visible
-
-    if exfil_enabled:
-        if not loot_exists:
-            storage.disable_usb_drive()
-    if(board.board_id == 'raspberry_pi_pico' or board.board_id == 'raspberry_pi_pico2'):
-        # On Pi Pico, default to USB visible
-        noStorage = not noStorageStatus
-    elif(board.board_id == 'raspberry_pi_pico_w' or board.board_id == 'raspberry_pi_pico2_w'):
-        # on Pi Pico W, default to USB hidden by default
-        # so webapp can access storage
-        noStorage = noStorageStatus
-
-if(noStorage == True):
-    # don't show USB drive to host PC
+if not enable_storage:
     storage.disable_usb_drive()
     print("Disabling USB drive")
 else:
-    # normal boot
     print("USB drive enabled")

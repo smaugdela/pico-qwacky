@@ -1,29 +1,32 @@
 import digitalio
-from digitalio import DigitalInOut, Pull
 from board import *
 from adafruit_debouncer import Debouncer
 
-#init button
-button1_pin = DigitalInOut(GP22) # defaults to input
-button1_pin.pull = Pull.UP      # turn on internal pull-up resistor
-button1 =  Debouncer(button1_pin)
+# Initialize Display Buttons
+btnA_pin = digitalio.DigitalInOut(GP12)
+btnA_pin.switch_to_input(pull=digitalio.Pull.UP)
 
+btnB_pin = digitalio.DigitalInOut(GP13)
+btnB_pin.switch_to_input(pull=digitalio.Pull.UP)
 
-# payload1 = GPIO12 to GND
-# payload2 = GPIO13 to GND
-# payload3 = GPIO14 to GND
-# payload4 = GPIO15 to GND
+btnX_pin = digitalio.DigitalInOut(GP14)
+btnX_pin.switch_to_input(pull=digitalio.Pull.UP)
 
-#init payload selection switch
-payload1Pin = digitalio.DigitalInOut(GP12)
-payload1Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload2Pin = digitalio.DigitalInOut(GP13)
-payload2Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload3Pin = digitalio.DigitalInOut(GP14)
-payload3Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload4Pin = digitalio.DigitalInOut(GP15)
-payload4Pin.switch_to_input(pull=digitalio.Pull.UP)
+btnY_pin = digitalio.DigitalInOut(GP15)
+btnY_pin.switch_to_input(pull=digitalio.Pull.UP)
 
-# check GP0 for setup mode
-progStatusPin = digitalio.DigitalInOut(GP0)
-progStatusPin.switch_to_input(pull=digitalio.Pull.UP)
+# LATCH SETUP MODE STATE
+# When code.py starts, this imports immediately. If you are holding Button A 
+# from plugging it in, this latches as True. You can release it afterwards.
+SETUP_MODE_LATCHED = not btnA_pin.value
+
+# Wrap them in debouncers for your later UI payload menu
+button_A = Debouncer(btnA_pin)
+button_B = Debouncer(btnB_pin)
+button_X = Debouncer(btnX_pin)
+button_Y = Debouncer(btnY_pin)
+
+# Legacy GP22 button — kept for backwards compatibility with monitor_buttons()
+button1_pin = digitalio.DigitalInOut(GP22)
+button1_pin.pull = digitalio.Pull.UP
+button1 = Debouncer(button1_pin)

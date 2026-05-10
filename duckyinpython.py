@@ -21,13 +21,13 @@ from adafruit_hid.consumer_control_code import ConsumerControlCode
 from pins import *
 
 # comment out these lines for non_US keyboards
-from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS as KeyboardLayout
-from adafruit_hid.keycode import Keycode
+# from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS as KeyboardLayout
+# from adafruit_hid.keycode import Keycode
 
 # uncomment these lines for non_US keyboards
 # replace LANG with appropriate language
-#from keyboard_layout_win_LANG import KeyboardLayout as KeyboardLayout
-#from keycode_win_LANG import Keycode
+from keyboard_layout_win_fr import KeyboardLayout as KeyboardLayout
+from keycode_win_fr import Keycode
 
 def _capsOn():
     return kbd.led_on(Keyboard.LED_CAPS_LOCK)
@@ -472,8 +472,7 @@ layout = KeyboardLayout(kbd)
 
 def getProgrammingStatus():
     # see setup mode for instructions
-    progStatus = not progStatusPin.value
-    return(progStatus)
+    return SETUP_MODE_LATCHED
 
 
 defaultDelay = 0
@@ -510,13 +509,13 @@ async def runScript(file):
         print("Unable to open file", file)
 
 def selectPayload():
-    global payload1Pin, payload2Pin, payload3Pin, payload4Pin
+    global btnA_pin, btnB_pin, btnX_pin, btnY_pin
     payload = "payload.dd"
     # check switch status
-    payload1State = not payload1Pin.value
-    payload2State = not payload2Pin.value
-    payload3State = not payload3Pin.value
-    payload4State = not payload4Pin.value
+    payload1State = not btnA_pin.value
+    payload2State = not btnB_pin.value
+    payload3State = not btnX_pin.value
+    payload4State = not btnY_pin.value
 
     if(payload1State == True):
         payload = "payload.dd"
